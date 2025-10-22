@@ -31,11 +31,11 @@ class CommandProcessor(
     
     fun processCommand(command: String, meshService: BluetoothMeshService, myPeerID: String, onSendMessage: (String, List<String>, String?) -> Unit, viewModel: ChatViewModel? = null): Boolean {
         if (!command.startsWith("/")) return false
-        
+
         val parts = command.split(" ")
         val cmd = parts.first().lowercase()
         when (cmd) {
-            "/j", "/join" -> handleJoinCommand(parts, myPeerID)
+            "/j", "/join" -> handleJoinCommand(parts, myPeerID, viewModel)
             "/m", "/msg" -> handleMessageCommand(parts, meshService)
             "/w" -> handleWhoCommand(meshService, viewModel)
             "/clear" -> handleClearCommand()
@@ -47,16 +47,20 @@ class CommandProcessor(
             "/channels" -> handleChannelsCommand()
             else -> handleUnknownCommand(cmd)
         }
-        
+
         return true
     }
     
-    private fun handleJoinCommand(parts: List<String>, myPeerID: String) {
+    private fun handleJoinCommand(parts: List<String>, myPeerID: String, viewModel: ChatViewModel?) {
         if (parts.size > 1) {
             val channelName = parts[1]
             val channel = if (channelName.startsWith("#")) channelName else "#$channelName"
             val password = if (parts.size > 2) parts[2] else null
-            val success = channelManager.joinChannel(channel, password, myPeerID)
+
+            // Get current timeline from viewModel
+            val timeline = viewModel?.selectedLocationChannel?.value
+
+            val success = channelManager.joinChannel(channel, password, myPeerID, timeline)
             if (success) {
                 val systemMessage = BitchatMessage(
                     sender = "system",
@@ -345,9 +349,15 @@ class CommandProcessor(
         val channelList = if (allChannels.isEmpty()) {
             "no channels joined"
         } else {
-            "joined channels: ${allChannels.joinToString(", ")}"
+            // Extract channel names from composite keys for display
+            val channelNames = allChannels
+                .map { ChannelKeys.parseChannelName(it) }
+                .distinct()
+                .sorted()
+                .joinToString(", ")
+            "joined channels: $channelNames"
         }
-        
+
         val systemMessage = BitchatMessage(
             sender = "system",
             content = channelList,

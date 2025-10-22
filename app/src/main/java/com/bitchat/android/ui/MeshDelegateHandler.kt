@@ -46,13 +46,13 @@ class MeshDelegateHandler(
             if (message.isPrivate) {
                 // Private message
                 privateChatManager.handleIncomingPrivateMessage(message)
-                
+
                 // Reactive read receipts: Send immediately if user is currently viewing this chat
                 message.senderPeerID?.let { senderPeerID ->
                     sendReadReceiptIfFocused(senderPeerID)
                 }
-                
-                // Show notification with enhanced information - now includes senderPeerID 
+
+                // Show notification with enhanced information - now includes senderPeerID
                 message.senderPeerID?.let { senderPeerID ->
                     // Use nickname if available, fall back to sender or senderPeerID
                     val senderNickname = message.sender.takeIf { it != senderPeerID } ?: senderPeerID
@@ -63,17 +63,27 @@ class MeshDelegateHandler(
                         messageContent = preview
                     )
                 }
-            } else if (message.channel != null) {
-                // Channel message
-                if (state.getJoinedChannelsValue().contains(message.channel)) {
-                    channelManager.addChannelMessage(message.channel, message, message.senderPeerID)
-                }
             } else {
-                // Public mesh message - always store to preserve message history
-                messageManager.addMessage(message)
+                // Check for channel messages: new format (content) or legacy format (channel field)
+                val channelInfo = messageManager.parseChannelInfo(message.content)
+                val channelName = channelInfo?.first ?: message.channel
 
-                // Check for mentions in mesh chat
-                checkAndTriggerMeshMentionNotification(message)
+                if (channelName != null) {
+                    // This is a channel message
+                    val key = ChannelKeys.create(com.bitchat.android.geohash.ChannelID.Mesh, channelName)
+
+                    // Only add to channel if user has joined it
+                    if (state.getJoinedChannelsValue().contains(key)) {
+                        val displayContent = channelInfo?.second ?: message.content
+                        channelManager.addChannelMessage(key, message.copy(content = displayContent), message.senderPeerID)
+                    }
+                } else {
+                    // Public mesh message - always store to preserve message history
+                    messageManager.addMessage(message)
+
+                    // Check for mentions in mesh chat
+                    checkAndTriggerMeshMentionNotification(message)
+                }
             }
             
             // Periodic cleanup

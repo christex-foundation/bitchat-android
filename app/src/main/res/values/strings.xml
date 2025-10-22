@@ -68,7 +68,7 @@
 
   <!-- Chat header & accessibility -->
   <string name="chat_back">back</string>
-  <string name="chat_channel_prefix">channel: %1$s</string>
+  <string name="chat_channel_prefix">%1$s</string>
   <string name="chat_leave">leave</string>
   <string name="cd_nostr_reachable">Nostr reachable</string>
   <string name="cd_unread_private_messages">Unread private messages</string>

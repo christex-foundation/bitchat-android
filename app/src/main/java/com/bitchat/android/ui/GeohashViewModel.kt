@@ -73,9 +73,26 @@ class GeohashViewModel(
         }
         try {
             locationChannelManager = com.bitchat.android.geohash.LocationChannelManager.getInstance(getApplication())
-            locationChannelManager?.selectedChannel?.observeForever { channel ->
-                state.setSelectedLocationChannel(channel)
-                switchLocationChannel(channel)
+            locationChannelManager?.selectedChannel?.observeForever { newTimeline ->
+                // Check if current channel is valid for new timeline
+                val currentChannelKey = state.getCurrentChannelValue()
+                if (currentChannelKey != null) {
+                    val isValidForNewTimeline = when (newTimeline) {
+                        is com.bitchat.android.geohash.ChannelID.Mesh, null ->
+                            ChannelKeys.isMesh(currentChannelKey)
+                        is com.bitchat.android.geohash.ChannelID.Location ->
+                            ChannelKeys.isGeo(currentChannelKey) &&
+                            ChannelKeys.parseGeohash(currentChannelKey) == newTimeline.channel.geohash
+                    }
+
+                    if (!isValidForNewTimeline) {
+                        // Exit channel view when switching to incompatible timeline
+                        state.setCurrentChannel(null)
+                    }
+                }
+
+                state.setSelectedLocationChannel(newTimeline)
+                switchLocationChannel(newTimeline)
             }
             locationChannelManager?.teleported?.observeForever { teleported ->
                 state.setIsTeleported(teleported)
@@ -103,17 +120,29 @@ class GeohashViewModel(
             try {
                 val tempId = "temp_${System.currentTimeMillis()}_${kotlin.random.Random.nextInt(1000)}"
                 val pow = PoWPreferenceManager.getCurrentSettings()
+
+                // Parse channel info if this is a channel message (format: "#gaming hello")
+                val channelInfo = messageManager.parseChannelInfo(content)
+                val (storageKey, channelName, displayContent) = if (channelInfo != null) {
+                    // Channel message: store to "geo:9q8yy:#gaming" with content "hello"
+                    val (cName, msgText) = channelInfo
+                    Triple("geo:${channel.geohash}:$cName", cName, msgText)
+                } else {
+                    // Regular geohash message: store to "geo:9q8yy" with full content
+                    Triple("geo:${channel.geohash}", "#${channel.geohash}", content)
+                }
+
                 val localMsg = com.bitchat.android.model.BitchatMessage(
                     id = tempId,
                     sender = nickname ?: myPeerID,
-                    content = content,
+                    content = displayContent,
                     timestamp = Date(),
                     isRelay = false,
                     senderPeerID = "geohash:${channel.geohash}",
-                    channel = "#${channel.geohash}",
+                    channel = channelName,
                     powDifficulty = if (pow.enabled) pow.difficulty else null
                 )
-                messageManager.addChannelMessage("geo:${channel.geohash}", localMsg)
+                messageManager.addChannelMessage(storageKey, localMsg)
                 val startedMining = pow.enabled && pow.difficulty > 0
                 if (startedMining) {
                     com.bitchat.android.ui.PoWMiningTracker.startMiningMessage(tempId)
