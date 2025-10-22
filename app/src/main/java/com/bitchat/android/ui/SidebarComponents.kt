@@ -92,8 +92,8 @@ fun SidebarOverlay(
                                 channels = joinedChannels.toList(), // Convert Set to List
                                 currentChannel = currentChannel,
                                 colorScheme = colorScheme,
-                                onChannelClick = { channel ->
-                                    viewModel.switchToChannel(channel)
+                                onChannelClick = { channelKey ->
+                                    viewModel.switchToChannelWithTimelineContext(channelKey)
                                     onDismiss()
                                 },
                                 onLeaveChannel = { channel ->
@@ -178,71 +178,138 @@ fun ChannelsSection(
     onLeaveChannel: (String) -> Unit,
     unreadChannelMessages: Map<String, Int> = emptyMap()
 ) {
+    // Group channels by timeline
+    val meshChannels = channels.filter { ChannelKeys.isMesh(it) }.sorted()
+    val geohashChannels = channels.filter { ChannelKeys.isGeo(it) }
+        .groupBy { ChannelKeys.parseGeohash(it) ?: "" }
+        .toSortedMap()
+
     Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // Mesh channels section
+        if (meshChannels.isNotEmpty()) {
+            ChannelGroupHeader(
+                icon = Icons.Filled.Bluetooth,
+                title = "MESH",
+                colorScheme = colorScheme
+            )
+
+            meshChannels.forEach { key ->
+                ChannelItem(
+                    channelKey = key,
+                    displayName = ChannelKeys.parseChannelName(key),
+                    currentChannel = currentChannel,
+                    unreadCount = unreadChannelMessages[key] ?: 0,
+                    colorScheme = colorScheme,
+                    onChannelClick = onChannelClick,
+                    onLeaveChannel = onLeaveChannel
+                )
+            }
+        }
+
+        // Geohash channels section (grouped by geohash)
+        geohashChannels.forEach { (geohash, geoChannels) ->
+            if (meshChannels.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            ChannelGroupHeader(
+                icon = Icons.Filled.Public,
+                title = "GEO $geohash",
+                colorScheme = colorScheme
+            )
+
+            geoChannels.sorted().forEach { key ->
+                ChannelItem(
+                    channelKey = key,
+                    displayName = ChannelKeys.parseChannelName(key),
+                    currentChannel = currentChannel,
+                    unreadCount = unreadChannelMessages[key] ?: 0,
+                    colorScheme = colorScheme,
+                    onChannelClick = onChannelClick,
+                    onLeaveChannel = onLeaveChannel
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChannelGroupHeader(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    colorScheme: ColorScheme
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(10.dp),
+            tint = colorScheme.onSurface.copy(alpha = 0.6f)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelSmall,
+            color = colorScheme.onSurface.copy(alpha = 0.6f),
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun ChannelItem(
+    channelKey: String,
+    displayName: String,
+    currentChannel: String?,
+    unreadCount: Int,
+    colorScheme: ColorScheme,
+    onChannelClick: (String) -> Unit,
+    onLeaveChannel: (String) -> Unit
+) {
+    val isSelected = channelKey == currentChannel
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onChannelClick(channelKey) }
+            .background(
+                if (isSelected) colorScheme.primaryContainer.copy(alpha = 0.3f)
+                else Color.Transparent
+            )
+            .padding(horizontal = 24.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Unread badge for channels
+        UnreadBadge(
+            count = unreadCount,
+            colorScheme = colorScheme,
+            modifier = Modifier.padding(end = 8.dp)
+        )
+
+        Text(
+            text = displayName,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (isSelected) colorScheme.primary else colorScheme.onSurface,
+            fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+            modifier = Modifier.weight(1f)
+        )
+
+        // Leave channel button
+        IconButton(
+            onClick = { onLeaveChannel(channelKey) },
+            modifier = Modifier.size(24.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.Person, // Using Person icon as placeholder
-                contentDescription = null,
-                modifier = Modifier.size(10.dp),
-                tint = colorScheme.onSurface.copy(alpha = 0.6f)
+                imageVector = Icons.Default.Close,
+                contentDescription = stringResource(com.bitchat.android.R.string.cd_leave_channel),
+                modifier = Modifier.size(14.dp),
+                tint = colorScheme.onSurface.copy(alpha = 0.5f)
             )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = stringResource(id = R.string.channels).uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                color = colorScheme.onSurface.copy(alpha = 0.6f),
-                fontWeight = FontWeight.Bold
-            )
-        }
-        
-        channels.forEach { channel ->
-            val isSelected = channel == currentChannel
-            val unreadCount = unreadChannelMessages[channel] ?: 0
-            
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onChannelClick(channel) }
-                    .background(
-                        if (isSelected) colorScheme.primaryContainer.copy(alpha = 0.3f)
-                        else Color.Transparent
-                    )
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Unread badge for channels
-                UnreadBadge(
-                    count = unreadCount,
-                    colorScheme = colorScheme,
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-                
-                Text(
-                    text = channel, // Channel already contains the # prefix
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isSelected) colorScheme.primary else colorScheme.onSurface,
-                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                    modifier = Modifier.weight(1f)
-                )
-                
-                // Leave channel button
-                IconButton(
-                    onClick = { onLeaveChannel(channel) },
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = stringResource(com.bitchat.android.R.string.cd_leave_channel),
-                        modifier = Modifier.size(14.dp),
-                        tint = colorScheme.onSurface.copy(alpha = 0.5f)
-                    )
-                }
-            }
         }
     }
 }

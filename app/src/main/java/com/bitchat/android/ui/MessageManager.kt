@@ -309,7 +309,19 @@ class MessageManager(private val state: ChatState) {
             .distinct()
             .toList()
     }
-    
+
+    /**
+     * Parse channel information from message content.
+     * Messages to channels are formatted as: "#channelname message content"
+     *
+     * @return Pair of (channelName, messageText) or null if not a channel message
+     */
+    fun parseChannelInfo(content: String): Pair<String, String>? {
+        if (!content.startsWith("#")) return null
+        val parts = content.split(" ", limit = 2)
+        return Pair(parts[0], parts.getOrNull(1) ?: "")
+    }
+
     // MARK: - Emergency Clear
     
     fun clearAllMessages() {

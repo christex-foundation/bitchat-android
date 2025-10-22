@@ -278,11 +278,38 @@ class ChatViewModel(
     // MARK: - Channel Management (delegated)
     
     fun joinChannel(channel: String, password: String? = null): Boolean {
-        return channelManager.joinChannel(channel, password, meshService.myPeerID)
+        // Get current timeline to ensure channel is scoped correctly
+        val timeline = state.selectedLocationChannel.value
+        return channelManager.joinChannel(channel, password, meshService.myPeerID, timeline)
     }
     
     fun switchToChannel(channel: String?) {
         channelManager.switchToChannel(channel)
+    }
+
+    /**
+     * Switch to a channel and automatically update timeline context.
+     * For geo channels, switches to the appropriate geohash timeline.
+     * For mesh channels, switches to mesh timeline.
+     */
+    fun switchToChannelWithTimelineContext(channelKey: String) {
+        // First switch timeline based on channel key
+        when {
+            ChannelKeys.isGeo(channelKey) -> {
+                val geohash = ChannelKeys.parseGeohash(channelKey)
+                if (geohash != null) {
+                    val level = ChannelKeys.levelForGeohashLength(geohash.length)
+                    val geohashChannel = com.bitchat.android.geohash.GeohashChannel(level, geohash)
+                    selectLocationChannel(com.bitchat.android.geohash.ChannelID.Location(geohashChannel))
+                }
+            }
+            ChannelKeys.isMesh(channelKey) -> {
+                selectLocationChannel(com.bitchat.android.geohash.ChannelID.Mesh)
+            }
+        }
+
+        // Then switch to the channel
+        switchToChannel(channelKey)
     }
     
     fun leaveChannel(channel: String) {
@@ -407,7 +434,7 @@ class ChatViewModel(
                     // Default: route via mesh
                     meshService.sendMessage(messageContent, mentions, channel)
                 }
-            })
+            }, this)
             return
         }
         
@@ -449,8 +476,16 @@ class ChatViewModel(
             // Check if we're in a location channel
             val selectedLocationChannel = state.selectedLocationChannel.value
             if (selectedLocationChannel is com.bitchat.android.geohash.ChannelID.Location) {
+                // Determine message content - prepend channel name if in a channel
+                val messageContent = if (currentChannelValue != null && ChannelKeys.isGeo(currentChannelValue)) {
+                    val channelName = ChannelKeys.parseChannelName(currentChannelValue)
+                    "$channelName $content"
+                } else {
+                    content
+                }
+
                 // Send to geohash channel via Nostr ephemeral event
-                geohashViewModel.sendGeohashMessage(content, selectedLocationChannel.channel, meshService.myPeerID, state.getNicknameValue())
+                geohashViewModel.sendGeohashMessage(messageContent, selectedLocationChannel.channel, meshService.myPeerID, state.getNicknameValue())
             } else {
                 // Send public/channel message via mesh
                 val message = BitchatMessage(
@@ -464,26 +499,30 @@ class ChatViewModel(
                 )
 
                 if (currentChannelValue != null) {
+                    // For channel messages, prepend channel name to content for wire format
+                    val channelName = ChannelKeys.parseChannelName(currentChannelValue)
+                    val wireContent = "$channelName $content"
+
                     channelManager.addChannelMessage(currentChannelValue, message, meshService.myPeerID)
 
                     // Check if encrypted channel
                     if (channelManager.hasChannelKey(currentChannelValue)) {
                         channelManager.sendEncryptedChannelMessage(
-                            content,
+                            wireContent,
                             mentions,
                             currentChannelValue,
                             state.getNicknameValue(),
                             meshService.myPeerID,
                             onEncryptedPayload = { encryptedData ->
                                 // This would need proper mesh service integration
-                                meshService.sendMessage(content, mentions, currentChannelValue)
+                                meshService.sendMessage(wireContent, mentions, null)
                             },
                             onFallback = {
-                                meshService.sendMessage(content, mentions, currentChannelValue)
+                                meshService.sendMessage(wireContent, mentions, null)
                             }
                         )
                     } else {
-                        meshService.sendMessage(content, mentions, currentChannelValue)
+                        meshService.sendMessage(wireContent, mentions, null)
                     }
                 } else {
                     messageManager.addMessage(message)

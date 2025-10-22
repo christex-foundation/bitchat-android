@@ -27,61 +27,69 @@ class ChannelManager(
     
     // MARK: - Channel Lifecycle
     
-    fun joinChannel(channel: String, password: String? = null, myPeerID: String): Boolean {
+    fun joinChannel(
+        channel: String,
+        password: String? = null,
+        myPeerID: String,
+        timeline: com.bitchat.android.geohash.ChannelID? = null
+    ): Boolean {
         val channelTag = if (channel.startsWith("#")) channel else "#$channel"
-        
+
+        // Create composite key based on timeline
+        val key = ChannelKeys.create(timeline, channelTag)
+
         // Check if already joined
-        if (state.getJoinedChannelsValue().contains(channelTag)) {
-            if (state.getPasswordProtectedChannelsValue().contains(channelTag) && !channelKeys.containsKey(channelTag)) {
+        if (state.getJoinedChannelsValue().contains(key)) {
+            if (state.getPasswordProtectedChannelsValue().contains(key) && !channelKeys.containsKey(key)) {
                 // Need password verification
                 if (password != null) {
-                    return verifyChannelPassword(channelTag, password)
+                    return verifyChannelPassword(key, password)
                 } else {
-                    state.setPasswordPromptChannel(channelTag)
+                    state.setPasswordPromptChannel(key)
                     state.setShowPasswordPrompt(true)
                     return false
                 }
             }
-            switchToChannel(channelTag)
+            switchToChannel(key)
             return true
         }
-        
+
         // If password protected and no key yet
-        if (state.getPasswordProtectedChannelsValue().contains(channelTag) && !channelKeys.containsKey(channelTag)) {
-            if (dataManager.isChannelCreator(channelTag, myPeerID)) {
+        if (state.getPasswordProtectedChannelsValue().contains(key) && !channelKeys.containsKey(key)) {
+            if (dataManager.isChannelCreator(key, myPeerID)) {
                 // Channel creator bypass
             } else if (password != null) {
-                if (!verifyChannelPassword(channelTag, password)) {
+                if (!verifyChannelPassword(key, password)) {
                     return false
                 }
             } else {
-                state.setPasswordPromptChannel(channelTag)
+                state.setPasswordPromptChannel(key)
                 state.setShowPasswordPrompt(true)
                 return false
             }
         }
-        
+
         // Join the channel
         val updatedChannels = state.getJoinedChannelsValue().toMutableSet()
-        updatedChannels.add(channelTag)
+        updatedChannels.add(key)
         state.setJoinedChannels(updatedChannels)
-        
+
         // Set as creator if new channel
-        if (!dataManager.channelCreators.containsKey(channelTag) && !state.getPasswordProtectedChannelsValue().contains(channelTag)) {
-            dataManager.addChannelCreator(channelTag, myPeerID)
+        if (!dataManager.channelCreators.containsKey(key) && !state.getPasswordProtectedChannelsValue().contains(key)) {
+            dataManager.addChannelCreator(key, myPeerID)
         }
-        
+
         // Add ourselves as member
-        dataManager.addChannelMember(channelTag, myPeerID)
-        
+        dataManager.addChannelMember(key, myPeerID)
+
         // Initialize channel messages if needed
-        if (!state.getChannelMessagesValue().containsKey(channelTag)) {
+        if (!state.getChannelMessagesValue().containsKey(key)) {
             val updatedChannelMessages = state.getChannelMessagesValue().toMutableMap()
-            updatedChannelMessages[channelTag] = emptyList()
+            updatedChannelMessages[key] = emptyList()
             state.setChannelMessages(updatedChannelMessages)
         }
-        
-        switchToChannel(channelTag)
+
+        switchToChannel(key)
         saveChannelData()
         return true
     }

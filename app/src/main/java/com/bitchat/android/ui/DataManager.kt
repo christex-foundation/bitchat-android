@@ -78,27 +78,41 @@ class DataManager(private val context: Context) {
     fun loadChannelData(): Pair<Set<String>, Set<String>> {
         // Load joined channels
         val savedChannels = prefs.getStringSet("joined_channels", emptySet()) ?: emptySet()
-        
+
+        // Normalize old format keys (backward compatibility migration)
+        // Old format: "#gaming" -> New format: "mesh:#gaming"
+        val normalizedChannels = savedChannels.map { key ->
+            ChannelKeys.normalize(key)
+        }.toSet()
+
         // Load password protected channels
         val savedProtectedChannels = prefs.getStringSet("password_protected_channels", emptySet()) ?: emptySet()
-        
+
+        // Normalize password protected channels as well
+        val normalizedProtectedChannels = savedProtectedChannels.map { key ->
+            ChannelKeys.normalize(key)
+        }.toSet()
+
         // Load channel creators
         val creatorsJson = prefs.getString("channel_creators", "{}")
         try {
             val creatorsMap = gson.fromJson(creatorsJson, Map::class.java) as? Map<String, String>
-            creatorsMap?.let { _channelCreators.putAll(it) }
+            // Normalize creator keys too
+            creatorsMap?.forEach { (key, value) ->
+                _channelCreators[ChannelKeys.normalize(key)] = value
+            }
         } catch (e: Exception) {
             // Ignore parsing errors
         }
-        
+
         // Initialize channel members for loaded channels
-        savedChannels.forEach { channel ->
+        normalizedChannels.forEach { channel ->
             if (!_channelMembers.containsKey(channel)) {
                 _channelMembers[channel] = mutableSetOf()
             }
         }
-        
-        return Pair(savedChannels, savedProtectedChannels)
+
+        return Pair(normalizedChannels, normalizedProtectedChannels)
     }
     
     fun saveChannelData(joinedChannels: Set<String>, passwordProtectedChannels: Set<String>) {

@@ -115,6 +115,7 @@
 │      Business Logic Managers (300+ lines each) │
 │  • MessageManager - Message lifecycle         │
 │  • ChannelManager - Channel management        │
+│  • ChannelKeys - Composite key operations     │
 │  • PrivateChatManager - P2P messaging        │
 │  • CommandProcessor - IRC-style commands     │
 │  • GeohashViewModel - Location-based chats   │
@@ -428,10 +429,14 @@ fun getPeerFingerprint(peerID: String): String?
 - Encryption keys (static Noise keys, Ed25519 keys)
 
 #### 2. Channels
-- `joined_channels` - Set of channel names
-- `password_protected_channels` - Set of protected channels
-- `channel_creators` - JSON map of channel → creator peer ID
+- `joined_channels` - Set of composite channel keys with timeline namespacing
+  - Format: `{timeline}:{identifier}:{channel}` (e.g., `mesh:#gaming`, `geo:9q8yy:#gaming`)
+  - Prevents namespace collisions between mesh and geohash timelines
+  - Backward compatible: legacy keys auto-normalized to `mesh:` prefix on load
+- `password_protected_channels` - Set of protected channel keys (composite format)
+- `channel_creators` - JSON map of composite key → creator peer ID
 - Channel-specific keys and passwords
+- Managed by `ChannelKeys` helper object for create/parse/validate operations
 - Stored via `DataManager` in plain SharedPreferences
 
 #### 3. Peers & Social
@@ -756,6 +761,7 @@ Sets adapter name to 8-char peer ID without user control.
 | `ui/ChatViewModel.kt` | Main MVVM coordinator |
 | `ui/MessageManager.kt` | Message lifecycle |
 | `ui/ChannelManager.kt` | Channel management |
+| `ui/ChannelKeys.kt` | Timeline-scoped composite key operations (see ADR-001) |
 | `ui/PrivateChatManager.kt` | P2P messaging |
 | `ui/CommandProcessor.kt` | IRC-style commands |
 | `services/MessageRouter.kt` | Mesh ↔︎ Nostr delivery orchestrator |

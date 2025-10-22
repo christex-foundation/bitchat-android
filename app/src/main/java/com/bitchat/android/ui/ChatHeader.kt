@@ -455,6 +455,7 @@ private fun ChannelHeader(
     onSidebarClick: () -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
+    val displayName = ChannelKeys.displayName(channel)
     
     Box(modifier = Modifier.fillMaxWidth()) {
         // Back button - positioned all the way to the left with minimal margin
@@ -489,7 +490,7 @@ private fun ChannelHeader(
         
         // Title - perfectly centered regardless of other elements
         Text(
-            text = stringResource(R.string.chat_channel_prefix, channel),
+            text = stringResource(R.string.chat_channel_prefix, displayName),
             style = MaterialTheme.typography.titleMedium,
             color = Color(0xFFFF9500), // Orange to match input field
             modifier = Modifier

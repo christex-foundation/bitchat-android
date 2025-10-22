@@ -80,21 +80,33 @@ class GeohashMessageHandler(
 
                 val senderName = repo.displayNameForNostrPubkeyUI(event.pubkey)
                 val hasNonce = try { NostrProofOfWork.hasNonce(event) } catch (_: Exception) { false }
+
+                // Parse channel info from message content
+                val channelInfo = messageManager.parseChannelInfo(event.content)
+                val (channelName, messageText, storageKey) = if (channelInfo != null) {
+                    // Channel message: "#gaming hello" -> channel="#gaming", text="hello", key="geo:9q8yy:#gaming"
+                    val (cName, mText) = channelInfo
+                    Triple(cName, mText, "geo:$subscribedGeohash:$cName")
+                } else {
+                    // Regular geohash message -> channel="#9q8yy", text=content, key="geo:9q8yy"
+                    Triple("#$subscribedGeohash", event.content, "geo:$subscribedGeohash")
+                }
+
                 val msg = BitchatMessage(
                     id = event.id,
                     sender = senderName,
-                    content = event.content,
+                    content = messageText,
                     timestamp = Date(event.createdAt * 1000L),
                     isRelay = false,
                     originalSender = repo.displayNameForNostrPubkey(event.pubkey),
                     senderPeerID = "nostr:${event.pubkey.take(8)}",
                     mentions = null,
-                    channel = "#$subscribedGeohash",
+                    channel = channelName,
                     powDifficulty = try {
                         if (hasNonce) NostrProofOfWork.calculateDifficulty(event.id).takeIf { it > 0 } else null
                     } catch (_: Exception) { null }
                 )
-                withContext(Dispatchers.Main) { messageManager.addChannelMessage("geo:$subscribedGeohash", msg) }
+                withContext(Dispatchers.Main) { messageManager.addChannelMessage(storageKey, msg) }
             } catch (e: Exception) {
                 Log.e(TAG, "onEvent error: ${e.message}")
             }
