@@ -1,9 +1,11 @@
 package com.bitchat.android.mesh
 
 import android.util.Log
+import com.bitchat.android.data.models.SolanaTransactionPacket
 import com.bitchat.android.protocol.BitchatPacket
 import com.bitchat.android.protocol.MessageType
 import com.bitchat.android.model.RoutedPacket
+import com.bitchat.android.solana.TransactionProtocolService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.actor
@@ -24,6 +26,9 @@ class PacketProcessor(private val myPeerID: String) {
     
     // Delegate for callbacks
     var delegate: PacketProcessorDelegate? = null
+
+    /** Optional: called when a Solana tx packet (0x30) is received. */
+    var solanaTxPacketCallback: ((SolanaTransactionPacket, String) -> Unit)? = null
     
     // Helper function to format peer ID with nickname for logging
     private fun formatPeerForLog(peerID: String): String {
@@ -148,6 +153,7 @@ class PacketProcessor(private val myPeerID: String) {
             MessageType.LEAVE -> handleLeave(routed)
             MessageType.FRAGMENT -> handleFragment(routed)
             MessageType.REQUEST_SYNC -> handleRequestSync(routed)
+            MessageType.SOLANA_TX_PACKET, MessageType.SOLANA_DELIVERY_ACK, MessageType.SOLANA_BROADCAST_CONFIRMATION, MessageType.SOLANA_STATUS_UPDATE -> handleSolanaTxPacket(routed)
             else -> {
                 // Handle private packet types (address check required)
                 if (packetRelayManager.isPacketAddressedToMe(packet)) {
@@ -175,6 +181,19 @@ class PacketProcessor(private val myPeerID: String) {
         }
     }
     
+    /**
+     * Handle Solana tx protocol packets (0x30–0x33). Decodes SOLANA_TX_PACKET and invokes callback.
+     */
+    private suspend fun handleSolanaTxPacket(routed: RoutedPacket) {
+        val peerID = routed.peerID ?: return
+        val payload = routed.packet.payload
+        val type = MessageType.fromValue(routed.packet.type) ?: return
+        if (type == MessageType.SOLANA_TX_PACKET) {
+            val decoded = TransactionProtocolService.decode(payload)
+            if (decoded != null) solanaTxPacketCallback?.invoke(decoded, peerID)
+        }
+    }
+
     /**
      * Handle Noise handshake message - SIMPLIFIED iOS-compatible version
      */

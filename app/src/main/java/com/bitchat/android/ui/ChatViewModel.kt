@@ -5,9 +5,11 @@ import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import com.bitchat.android.mesh.BluetoothMeshDelegate
 import com.bitchat.android.mesh.BluetoothMeshService
+import com.bitchat.android.data.models.SolanaTransactionPacket
 import com.bitchat.android.model.BitchatMessage
 import com.bitchat.android.model.BitchatMessageType
 import com.bitchat.android.protocol.BitchatPacket
@@ -132,6 +134,8 @@ class ChatViewModel(
     val peerRSSI: LiveData<Map<String, Int>> = state.peerRSSI
     val peerDirect: LiveData<Map<String, Boolean>> = state.peerDirect
     val showAppInfo: LiveData<Boolean> = state.showAppInfo
+    private val _lastReceivedSolanaTx = MutableLiveData<Pair<SolanaTransactionPacket, String>?>(null)
+    val lastReceivedSolanaTx: LiveData<Pair<SolanaTransactionPacket, String>?> = _lastReceivedSolanaTx
     val selectedLocationChannel: LiveData<com.bitchat.android.geohash.ChannelID?> = state.selectedLocationChannel
     val isTeleported: LiveData<Boolean> = state.isTeleported
     val geohashPeople: LiveData<List<GeoPerson>> = state.geohashPeople
@@ -140,6 +144,9 @@ class ChatViewModel(
 
     init {
         // Note: Mesh service delegate is now set by MainActivity
+        meshService.solanaTxPacketListener = { packet, peerID ->
+            _lastReceivedSolanaTx.postValue(Pair(packet, peerID))
+        }
         loadAndInitialize()
         // Subscribe to BLE transfer progress and reflect in message deliveryStatus
         viewModelScope.launch {

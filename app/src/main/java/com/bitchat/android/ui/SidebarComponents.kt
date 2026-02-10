@@ -34,6 +34,7 @@ import com.bitchat.android.ui.theme.BASE_FONT_SIZE
 fun SidebarOverlay(
     viewModel: ChatViewModel,
     onDismiss: () -> Unit,
+    onOpenWallet: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val colorScheme = MaterialTheme.colorScheme
@@ -78,7 +79,38 @@ fun SidebarOverlay(
                 SidebarHeader()
 
                 HorizontalDivider()
-                
+
+                // Solana Wallet entry
+                if (onOpenWallet != null) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onOpenWallet()
+                                onDismiss()
+                            }
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        color = Color.Transparent
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.AccountBalanceWallet,
+                                contentDescription = null,
+                                tint = colorScheme.onSurface
+                            )
+                            Text(
+                                text = stringResource(R.string.solana_wallet),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = colorScheme.onSurface
+                            )
+                        }
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                }
+
                 // Scrollable content
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),

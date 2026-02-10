@@ -390,4 +390,52 @@
     <item quantity="other">%d people</item>
   </plurals>
 
+  <!-- Solana Wallet & Transactions (MVP) -->
+  <string name="solana_wallet">Solana Wallet</string>
+  <string name="solana_create_wallet">Create Wallet</string>
+  <string name="solana_import_wallet">Import Wallet</string>
+  <string name="solana_balance">Balance</string>
+  <string name="solana_balance_sol">%1$s SOL</string>
+  <string name="solana_address">Address</string>
+  <string name="solana_copy_address">Copy address</string>
+  <string name="solana_address_copied">Address copied</string>
+  <string name="solana_send">Send</string>
+  <string name="solana_receive">Receive</string>
+  <string name="solana_refresh_balance">Refresh balance</string>
+  <string name="solana_export_seed">Export seed phrase</string>
+  <string name="solana_export_seed_warning">Anyone with your seed phrase can access your wallet. Store it securely.</string>
+  <string name="solana_receive_title">Receive SOL</string>
+  <string name="solana_receive_desc">Share your address or scan to receive SOL</string>
+  <string name="solana_send_title">Send SOL</string>
+  <string name="solana_recipient">Recipient</string>
+  <string name="solana_recipient_hint">Solana address or select peer</string>
+  <string name="solana_amount">Amount</string>
+  <string name="solana_amount_hint">0.0</string>
+  <string name="solana_select_peer">Select BitChat Peer</string>
+  <string name="solana_priority_fee">Priority fee</string>
+  <string name="solana_priority_fee_low">Low</string>
+  <string name="solana_priority_fee_medium">Medium</string>
+  <string name="solana_priority_fee_high">High</string>
+  <string name="solana_review_confirm">Review &amp; Confirm</string>
+  <string name="solana_confirm_send">Confirm send</string>
+  <string name="solana_sending">Sending…</string>
+  <string name="solana_transaction_queued">Transaction queued. Will broadcast when online.</string>
+  <string name="solana_transaction_confirmed">Transaction confirmed</string>
+  <string name="solana_transaction_failed">Transaction failed</string>
+  <string name="solana_error_no_wallet">No wallet. Create or import one first.</string>
+  <string name="solana_error_network">Network error. Check connection.</string>
+  <string name="solana_error_invalid_address">Invalid Solana address</string>
+  <string name="solana_error_insufficient_balance">Insufficient balance</string>
+  <string name="solana_error_creating_wallet">Failed to create wallet</string>
+  <string name="solana_error_loading_balance">Failed to load balance</string>
+  <string name="solana_status_pending">Pending</string>
+  <string name="solana_status_queued">Queued</string>
+  <string name="solana_status_broadcasting">Broadcasting…</string>
+  <string name="solana_status_confirmed">Confirmed</string>
+  <string name="solana_status_failed">Failed</string>
+  <string name="cd_solana_qr_code">QR code with Solana address</string>
+  <string name="cd_solana_copy_address">Copy Solana address</string>
+  <string name="cd_solana_send">Send SOL</string>
+  <string name="cd_solana_receive">Receive SOL</string>
+
 </resources>

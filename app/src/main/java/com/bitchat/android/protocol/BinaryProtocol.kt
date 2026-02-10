@@ -17,7 +17,12 @@ enum class MessageType(val value: UByte) {
     NOISE_ENCRYPTED(0x11u),  // Noise encrypted transport message
     FRAGMENT(0x20u), // Fragmentation for large packets
     REQUEST_SYNC(0x21u), // GCS-based sync request
-    FILE_TRANSFER(0x22u); // New: File transfer packet (BLE voice notes, etc.)
+    FILE_TRANSFER(0x22u), // File transfer packet (BLE voice notes, etc.)
+    // Solana transaction protocol (Phase 3)
+    SOLANA_TX_PACKET(0x30u),
+    SOLANA_DELIVERY_ACK(0x31u),
+    SOLANA_BROADCAST_CONFIRMATION(0x32u),
+    SOLANA_STATUS_UPDATE(0x33u);
 
     companion object {
         fun fromValue(value: UByte): MessageType? {

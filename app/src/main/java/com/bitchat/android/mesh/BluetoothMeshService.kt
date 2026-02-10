@@ -11,6 +11,8 @@ import com.bitchat.android.protocol.BitchatPacket
 import com.bitchat.android.protocol.MessageType
 import com.bitchat.android.protocol.SpecialRecipients
 import com.bitchat.android.model.RequestSyncPacket
+import com.bitchat.android.data.models.SolanaTransactionPacket
+import com.bitchat.android.solana.TransactionProtocolService
 import com.bitchat.android.sync.GossipSyncManager
 import com.bitchat.android.util.toHexString
 import kotlinx.coroutines.*
@@ -58,6 +60,9 @@ class BluetoothMeshService(private val context: Context) {
     
     // Delegate for message callbacks (maintains same interface)
     var delegate: BluetoothMeshDelegate? = null
+
+    /** Optional: called when a Solana tx packet (0x30) is received over the mesh. */
+    var solanaTxPacketListener: ((SolanaTransactionPacket, String) -> Unit)? = null
     
     // Coroutines
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -481,7 +486,10 @@ class BluetoothMeshService(private val context: Context) {
                 gossipSyncManager.handleRequestSync(fromPeer, req)
             }
         }
-        
+        packetProcessor.solanaTxPacketCallback = { packet, peerID ->
+            solanaTxPacketListener?.invoke(packet, peerID)
+        }
+
         // BluetoothConnectionManager delegates
         connectionManager.delegate = object : BluetoothConnectionManagerDelegate {
             override fun onPacketReceived(packet: BitchatPacket, peerID: String, device: android.bluetooth.BluetoothDevice?) {
@@ -614,6 +622,28 @@ class BluetoothMeshService(private val context: Context) {
             connectionManager.broadcastPacket(RoutedPacket(signedPacket))
             // Track our own broadcast message for sync
             try { gossipSyncManager.onPublicPacketSeen(signedPacket) } catch (_: Exception) { }
+        }
+    }
+
+    /**
+     * Send a Solana tx packet over the mesh (broadcast or to recipient).
+     */
+    fun sendSolanaTxPacket(solanaPacket: SolanaTransactionPacket, recipientID: ByteArray? = null) {
+        val payload = TransactionProtocolService.encode(solanaPacket)
+        serviceScope.launch {
+            val packet = BitchatPacket(
+                version = 2u,
+                type = MessageType.SOLANA_TX_PACKET.value,
+                senderID = hexStringToByteArray(myPeerID),
+                recipientID = recipientID ?: SpecialRecipients.BROADCAST,
+                timestamp = System.currentTimeMillis().toULong(),
+                payload = payload,
+                signature = null,
+                ttl = MAX_TTL
+            )
+            val signed = signPacketBeforeBroadcast(packet)
+            connectionManager.broadcastPacket(RoutedPacket(signed))
+            try { gossipSyncManager.onPublicPacketSeen(signed) } catch (_: Exception) { }
         }
     }
 

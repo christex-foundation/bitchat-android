@@ -39,7 +39,10 @@ import com.bitchat.android.ui.media.FullScreenImageViewer
  * - ChatUIUtils: Utility functions for formatting and colors
  */
 @Composable
-fun ChatScreen(viewModel: ChatViewModel) {
+fun ChatScreen(
+    viewModel: ChatViewModel,
+    onOpenWallet: (() -> Unit)? = null
+) {
     val colorScheme = MaterialTheme.colorScheme
     val messages by viewModel.messages.observeAsState(emptyList())
     val connectedPeers by viewModel.connectedPeers.observeAsState(emptyList())
@@ -327,6 +330,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
             SidebarOverlay(
                 viewModel = viewModel,
                 onDismiss = { viewModel.hideSidebar() },
+                onOpenWallet = onOpenWallet,
                 modifier = Modifier.fillMaxSize()
             )
         }

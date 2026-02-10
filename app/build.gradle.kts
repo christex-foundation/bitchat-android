@@ -16,6 +16,9 @@ android {
         versionCode = 26
         versionName = "1.5.1"
 
+        // Solana Devnet RPC (MVP uses Devnet for testing)
+        buildConfigField("String", "SOLANA_DEVNET_RPC_URL", "\"https://api.devnet.solana.com\"")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -48,6 +51,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         resources {
@@ -106,6 +110,15 @@ dependencies {
     
     // EXIF orientation handling for images
     implementation("androidx.exifinterface:exifinterface:1.3.7")
+    
+    // Hilt deferred (Kotlin 2.2 + KSP compatibility). Solana services from BitchatApplication.
+    
+    // Retrofit + Gson (Solana RPC)
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
+    
+    // ZXing (QR code for receive address)
+    implementation(libs.zxing.core)
     
     // Testing
     testImplementation(libs.bundles.testing)
