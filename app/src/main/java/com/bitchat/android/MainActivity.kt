@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.Lifecycle
@@ -38,6 +40,18 @@ import com.bitchat.android.onboarding.PermissionManager
 import com.bitchat.android.ui.ChatScreen
 import com.bitchat.android.ui.ChatViewModel
 import com.bitchat.android.ui.OrientationAwareActivity
+import com.bitchat.android.ui.screens.PeerItem
+import com.bitchat.android.ui.screens.PeerSelectionScreen
+import com.bitchat.android.ui.screens.ReceiveScreen
+import com.bitchat.android.ui.screens.SendTransactionScreen
+import com.bitchat.android.ui.screens.WalletScreen
+import com.bitchat.android.viewmodels.SendTransactionViewModel
+import com.bitchat.android.viewmodels.WalletState
+import com.bitchat.android.viewmodels.WalletViewModel
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import com.bitchat.android.ui.theme.BitchatTheme
 import com.bitchat.android.nostr.PoWPreferenceManager
 import kotlinx.coroutines.delay
@@ -54,13 +68,19 @@ class MainActivity : OrientationAwareActivity() {
     // Core mesh service - managed at app level
     private lateinit var meshService: BluetoothMeshService
     private val mainViewModel: MainViewModel by viewModels()
-    private val chatViewModel: ChatViewModel by viewModels { 
+    private val chatViewModel: ChatViewModel by viewModels {
         object : ViewModelProvider.Factory {
-            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 @Suppress("UNCHECKED_CAST")
                 return ChatViewModel(application, meshService) as T
             }
         }
+    }
+    private val walletViewModel: WalletViewModel by viewModels {
+        ViewModelProvider.AndroidViewModelFactory.getInstance(application)
+    }
+    private val sendTransactionViewModel: SendTransactionViewModel by viewModels {
+        ViewModelProvider.AndroidViewModelFactory.getInstance(application)
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -245,7 +265,56 @@ class MainActivity : OrientationAwareActivity() {
 
                 // Add the callback - this will be automatically removed when the activity is destroyed
                 onBackPressedDispatcher.addCallback(this, backCallback)
-                ChatScreen(viewModel = chatViewModel)
+                var showWalletScreen by remember { mutableStateOf(false) }
+                var walletSubScreen by remember { mutableStateOf("main") }
+                val walletState by walletViewModel.walletState.observeAsState(WalletState.Loading)
+                val connectedPeers by chatViewModel.connectedPeers.observeAsState(emptyList())
+                val peerNicknames by chatViewModel.peerNicknames.observeAsState(emptyMap())
+                val peerItems = remember(connectedPeers, peerNicknames) {
+                    connectedPeers.map { peerId: String ->
+                        PeerItem(
+                            peerId = peerId,
+                            nickname = peerNicknames[peerId],
+                            solanaAddress = null
+                        )
+                    }
+                }
+                if (showWalletScreen) {
+                    when (walletSubScreen) {
+                        "receive" -> {
+                            val address = (walletState as? WalletState.Ready)?.address ?: ""
+                            ReceiveScreen(
+                                address = address,
+                                onBack = { walletSubScreen = "main" }
+                            )
+                        }
+                        "send" -> SendTransactionScreen(
+                            viewModel = sendTransactionViewModel,
+                            onBack = { walletSubScreen = "main" },
+                            onSuccess = { walletSubScreen = "main" },
+                            onSelectPeer = { walletSubScreen = "peer" }
+                        )
+                        "peer" -> PeerSelectionScreen(
+                            peers = peerItems,
+                            onBack = { walletSubScreen = "send" },
+                            onSelectPeer = { peer ->
+                                peer.solanaAddress?.let { sendTransactionViewModel.setRecipient(it) }
+                                walletSubScreen = "send"
+                            }
+                        )
+                        else -> WalletScreen(
+                            viewModel = walletViewModel,
+                            onBack = { showWalletScreen = false; walletSubScreen = "main" },
+                            onSend = { walletSubScreen = "send" },
+                            onReceive = { walletSubScreen = "receive" }
+                        )
+                    }
+                } else {
+                    ChatScreen(
+                        viewModel = chatViewModel,
+                        onOpenWallet = { showWalletScreen = true }
+                    )
+                }
             }
             
             OnboardingState.ERROR -> {
