@@ -1,15 +1,26 @@
 # Exit Relay Feature: Design Document
 
-**Status:** ACTIVE - Simplified MVP Approach
-**Version:** 2.0
-**Last Updated:** 2025-10-24
+**Status:** NOT YET IMPLEMENTED
+**Version:** 2.1
+**Last Updated:** 2025-10-25
 **Author:** Design Review
 
 ---
 
 ## Overview
 
-This document outlines a **simplified, pragmatic approach** to building an "Exit Relay" feature that enables BitChat mesh network users to send Solana transactions even when offline.
+This document outlines a **simplified, pragmatic MVP** for an "Exit Relay" feature that enables BitChat mesh users to send Solana transactions while offline.
+
+Key MVP decisions:
+- Chain: Solana devnet (fixed, non-configurable)
+- RPC fast-path: sendTransaction with skipPreflight=true, preflightCommitment=processed
+- Blockhash: durable nonce (offline signing) — no interactive blockhash handshake in MVP
+- Relay policy: allow Wi‑Fi or cellular; battery must be ≥10%
+
+Goals
+- Enable offline users to submit Solana transfers via mesh with minimal roundtrips
+- Keep implementation small and reuse existing mesh infrastructure
+- Deliver fast user feedback (signature receipt) over the mesh
 
 ### The Core Idea (Simple Version)
 
@@ -33,18 +44,16 @@ This document outlines a **simplified, pragmatic approach** to building an "Exit
    ├─ Checks connectivity: No WiFi, no cellular
    └─ Shows: "You're offline. Request relay from nearby users?"
 
-3. Create Signed Transaction
-   ├─ Standard Solana transaction (250 bytes)
-   ├─ From: Alice's Solana address
-   ├─ To: Bob's Solana address
-   └─ Amount: 0.5 SOL
+3. Create Signed Transaction (Durable Nonce)
+   ├─ Standard Solana transfer using a durable nonce account
+   ├─ From: Alice's Solana address (signer + nonce authority)
+   ├─ To: Bob's Solana address; Amount: 0.5 SOL
+   └─ Uses cached durable nonce value; if none available, show error and do not send
 
 4. Wrap in RELAY_REQUEST Message
    ├─ Type: 0x30 (new message type)
-   ├─ Payload: {
-   │    transaction_bytes: <250 bytes>,
-   │    request_id: <16-byte UUID>
-   │  }
+   ├─ Payload (TLV, see Protocol): request_id + tx_bytes + flags
+   ├─ Packet-level signature: REQUIRED (HAS_SIGNATURE)
    └─ Broadcast through existing mesh
 
 5. UI Updates
@@ -76,18 +85,19 @@ Charlie's phone (WiFi!) ← Receives request
 
 2. Check Eligibility
    ├─ Am I an "Exit Relay"? ✓
-   ├─ Do I have internet (WiFi)? ✓
-   ├─ Is battery OK (>20%)? ✓
+   ├─ Connectivity: Wi‑Fi or cellular ✓
+   ├─ Battery: ≥10% ✓
    └─ Proceed with relay
 
 3. Extract Transaction Bytes
    └─ Parse: 250-byte signed transaction
 
 4. HTTP POST to Solana RPC
-   ├─ POST https://api.mainnet-beta.solana.com
-   ├─ Body: {"method": "sendTransaction", "params": ["base64_tx"]}
+   ├─ POST https://api.devnet.solana.com (fixed)
+   ├─ Body (JSON-RPC 2.0): {"jsonrpc":"2.0","id":"<request_id>","method":"sendTransaction",
+   │   "params":["<base64_tx>",{"skipPreflight":true,"preflightCommitment":"processed"}]}
    ├─ Response: {"result": "5K3x9pE...signature"}
-   └─ Time: ~1-3 seconds
+   └─ Time: ~1–3 seconds
 
 5. Create Receipt
    ├─ Type: 0x31 (RELAY_RECEIPT)
@@ -130,7 +140,7 @@ Charlie's phone (WiFi!) ← Receives request
 ┌──────────────────────────────────────────────────────────┐
 │                    ALICE (Offline)                       │
 ├──────────────────────────────────────────────────────────┤
-│  SolanaPaymentQueue → Create signed tx (250 bytes)       │
+│  SolanaPaymentQueue → Create signed tx (durable nonce)   │
 │         ↓                                                │
 │  Wrap in RELAY_REQUEST message (type 0x30)              │
 │         ↓                                                │
@@ -147,11 +157,11 @@ Charlie's phone (WiFi!) ← Receives request
 ├──────────────────────────────────────────────────────────┤
 │  PacketProcessor → MessageHandler → NEW HANDLER          │
 │         ↓                                                │
-│  SolanaRelayHandler.handleRequest() ← NEW (~150 lines)  │
+│  SolanaRelayHandler.handleRequest() ← NEW (~150 lines)   │
 │         ↓                                                │
 │  OkHttpProvider.post() ← EXISTING                       │
 │         ↓                                                │
-│  POST to Solana RPC                                      │
+│  POST to Solana RPC (devnet, skipPreflight)              │
 │         ↓                                                │
 │  Get signature: "5K3x9pE..."                             │
 │         ↓                                                │
@@ -226,10 +236,10 @@ Charlie's phone (WiFi!) ← Receives request
 ### Spam Prevention
 
 **Mechanisms:**
-- Economic cost (must pay tip, even if small)
+- Economic cost (tip optional, later)
 - Rate limiting (max 20 requests/hour per peer)
-- Battery constraints (no relay if <20%)
-- WiFi-only default (preserve cellular data)
+- Battery constraints (no relay if <10%)
+- Connectivity allowed: Wi‑Fi or cellular
 
 **Implementation:** Check recent request count, battery level, and connectivity before accepting relay requests.
 
@@ -260,6 +270,44 @@ Charlie's phone (WiFi!) ← Receives request
 
 ---
 
+## Durable Nonce Strategy (MVP)
+
+Rationale
+- Solana signatures cover the recentBlockhash; you cannot add a blockhash after the fact. To sign offline without a network roundtrip, use a durable nonce.
+
+Assumptions
+- Each user provisions a durable nonce account on devnet while online (one‑time)
+- The app caches the current nonce value locally; it remains valid until consumed
+- Alice is the nonce authority and signs the AdvanceNonceAccount instruction
+
+Behavior
+- If a fresh cached nonce is available, Alice constructs and signs the transaction offline
+- RELAY_REQUEST carries the fully signed tx bytes; the relay only submits and returns a signature
+- If the nonce was already consumed or unavailable, the relay returns a receipt with ERROR_CODE and message; no handshake fallback in MVP
+
+Note: A “relayer partial sign” cannot fix missing blockhash; signatures commit to the blockhash. A two‑step blockhash handshake is a future option, not in MVP.
+
+---
+
+## Android Implementation Plan (High Level)
+
+Core
+- Add MessageType entries (RELAY_REQUEST=0x30, RELAY_RECEIPT=0x31) and TLV codecs
+- New SolanaRelayHandler (~150 LOC): parse request, eligibility checks (connectivity, battery, rate), base64 encode, JSON‑RPC submit, emit receipt
+- Hook into PacketProcessor/MessageHandler to dispatch new types
+
+Eligibility gating
+- Connectivity: Wi‑Fi or cellular via ConnectivityManager
+- Battery: BatteryManager percentage ≥10%
+- Rate limit: per‑sender ≤20/hour; simple in‑memory window
+
+UX
+- Offline detection: prompt to request relay; show spinner with network size
+- On success: show signature and devnet explorer link
+- Timeout: mark failed if no receipt within ~30s; allow manual retry
+
+---
+
 ## Related Documents
 
 - `SOLANA_INTEGRATION.md` - Planned Solana features
@@ -284,8 +332,8 @@ This simplified approach prioritizes:
 **Next Steps:**
 1. ✅ Review this simplified design
 2. ✅ Get stakeholder approval
-3. 🔜 Create ADR documenting decisions
-4. 🔜 Begin Phase 1 implementation
+3. 🔜 Create ADR documenting MVP decisions (devnet, durable nonce, skipPreflight, Wi‑Fi/cellular, ≥10% battery)
+4. 🔜 Begin Phase 1 implementation behind a feature flag
 
 ---
 
